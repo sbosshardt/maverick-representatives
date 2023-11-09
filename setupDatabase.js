@@ -40,6 +40,18 @@ db.serialize(() => {
     );
   `);
 
+  // Create the totals table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS totals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      party TEXT,
+      yea INTEGER,
+      nay INTEGER,
+      present INTEGER,
+      not_voting INTEGER
+    );
+  `);
+
   // Create the legislators table
   db.run(`
     CREATE TABLE IF NOT EXISTS legislators (
