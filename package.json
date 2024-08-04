@@ -13,6 +13,7 @@
     "axios": "^1.6.1",
     "better-sqlite3": "^9.1.1",
     "date-and-time": "^3.0.3",
+    "fast-xml-parser": "^4.4.1",
     "xml2js": "^0.6.2"
   }
 }

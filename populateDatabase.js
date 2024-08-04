@@ -1,15 +1,22 @@
 const sqlite = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
-const xml2js = require('xml2js');
 const date = require('date-and-time');
+const sdb = require('./setupDatabase')
+const gd = require('./getDirectories')
+const dv = require('./downloadVotes')
+
+//const xml2js = require('xml2js');
+const { XMLParser } = require("fast-xml-parser");
+const xmlParser = new XMLParser({ignoreAttributes: false});
 
 // Function to parse an XML file
-const parseXMLFile = async (filePath) => {
-  const parser = new xml2js.Parser();
-  const data = fs.readFileSync(filePath);
-  return parser.parseStringPromise(data);
-};
+const parseXMLFile = (filePath) => {
+  console.log('In parseXMLFile for filePath:', filePath)
+  const data = fs.readFileSync(filePath)
+  let returnVal = xmlParser.parse(data);
+  return returnVal
+}
 
 const xml_db_name_mapping = {
   "majority": "majority",
@@ -35,61 +42,63 @@ global.leg_name_id_id_map = {};
 
 const processVoteMetadata = (voteMetadata) => {
   //console.log(voteMetadata);
-  //console.log(voteMetadata[0]['vote-totals'][0])
   let rollcallValues = {};
   Object.entries(xml_db_name_mapping).map(obj => {
     const xml_key = obj[0];
     const db_key = obj[1];
-    if (voteMetadata[0][xml_key]) {
-      rollcallValues[db_key] = voteMetadata[0][xml_key][0];
+    if (voteMetadata[xml_key]) {
+      rollcallValues[db_key] = voteMetadata[xml_key];
     }
   });
   if (rollcallValues['action_date']) {
     const parsed = date.parse(rollcallValues['action_date'],'D-MMM-YYYY'); 
     rollcallValues['action_date'] = date.format(parsed, 'YYYY-MM-DD');
   }
-  if (rollcallValues['action_time']?.['_']) {
-    rollcallValues['action_time'] = rollcallValues['action_time']['_'];
+  if (rollcallValues['action_time']?.['#text']) {
+    rollcallValues['action_time'] = rollcallValues['action_time']['#text'];
   }
   //console.log(rollcallValues);
-  let partyRows = [];
-  if (voteMetadata[0]['vote-totals']) {
-    const totals_by_party = voteMetadata[0]['vote-totals'][0]['totals-by-party']
+  let totalsRows = [];
+  if (voteMetadata['vote-totals']) {
+    const totals_by_party = voteMetadata['vote-totals']['totals-by-party']
+    //console.log("totals_by_party:", totals_by_party)
     for (i in totals_by_party) {
-      partyRows.push({
-        'party': totals_by_party[i]['party'][0],
-        'yea': totals_by_party[i]['yea-total'][0],
-        'nay': totals_by_party[i]['nay-total'][0],
-        'present': totals_by_party[i]['present-total'][0],
-        'not_voting': totals_by_party[i]['not-voting-total'][0],
+      totalsRows.push({
+        'party': totals_by_party[i]['party'],
+        'yea': totals_by_party[i]['yea-total'],
+        'nay': totals_by_party[i]['nay-total'],
+        'present': totals_by_party[i]['present-total'],
+        'not_voting': totals_by_party[i]['not-voting-total'],
       });
     }
-    if (voteMetadata[0]['vote-totals'][0]['totals-by-vote']?.[0]) {
-      let totals = voteMetadata[0]['vote-totals'][0]['totals-by-vote'][0];
-      partyRows.push({
+    if (voteMetadata['vote-totals']['totals-by-vote']) {
+      let totals = voteMetadata['vote-totals']['totals-by-vote'];
+      totalsRows.push({
         'party': '(All)',
-        'yea': totals['yea-total'][0],
-        'nay': totals['nay-total'][0],
-        'present': totals['present-total'][0],
-        'not_voting': totals['not-voting-total'][0],
+        'yea': totals['yea-total'],
+        'nay': totals['nay-total'],
+        'present': totals['present-total'],
+        'not_voting': totals['not-voting-total'],
       })
     }
-    //console.log(partyRows);
+    //console.log(totalsRows);
   }
-  return [rollcallValues, partyRows];
+  return [rollcallValues, totalsRows];
 }
 
-const processVoteData = (voteData) => {
+const processVoteData = (voteData, metadata) => {
   let votes = [];
-  const voteRecords = voteData[0]['recorded-vote'];
+  //console.log('voteData:', voteData)
+  const voteRecords = voteData['recorded-vote'];
+  //console.log('voteRecords:', voteRecords)
   for (i in voteRecords) {
-    const parsedLeg = voteRecords[i]['legislator'][0]['$'];
+    const legislator = voteRecords[i]['legislator']
     const vote = {
-      'name_id': parsedLeg['name-id'],
-      'legislator_name': parsedLeg['unaccented-name'],
-      'state': parsedLeg['state'],
-      'party': parsedLeg['party'],
-      'vote': voteRecords[i]['vote'][0]
+      'name_id': legislator['@_name-id'],
+      'legislator_name': legislator['@_unaccented-name'],
+      'state': legislator['@_state'],
+      'vote': voteRecords[i]['vote'],
+      'party': legislator['@_party'],
     };
     //console.log(legislator);
     //console.log(vote);
@@ -105,27 +114,38 @@ const getCols = (data) => {
   return [names, placeholders];
 };
 
-// Path to the SQLite database file
-const dbPath = path.join(__dirname, 'congress_votes.db');
-const db = new sqlite(dbPath);
-
 // Function to process a single XML file
-const processXMLFile = async (filePath) => {
+const processRollcallXmlFile = (filePath, db) => {
+  const data = parseXMLFile(filePath)
+  if (Object.hasOwn(data, 'rollcall-vote')) {
+    processHouseRollcallXmlData(data, db)
+  } else if (Object.hasOwn(data, 'roll_call_vote')) {
+    processSenateRollcallXmlData(data, db)
+  }
+}
+
+const processSenateRollcallXmlData = (data, db) => {
+  // todo: implement this
+  console.error('processSenateRollcallXmlData is under construction.')
+}
+
+const processHouseRollcallXmlData = (data, db) => {
   try {
-    const result = await parseXMLFile(filePath);
-    //const voteMetadata = result['vote-metadata'];
-    //const voteData = result['vote-data'];
-    const [metadata, totals] = processVoteMetadata(result['rollcall-vote']['vote-metadata']);
+    //const voteMetadata = data['vote-metadata'];
+    //const voteData = data['vote-data'];
+    const [metadata, totals] = processVoteMetadata(data['rollcall-vote']['vote-metadata']);
 
     // Begin a transaction
     db.prepare('BEGIN TRANSACTION').run();
     const [rc_names, rc_phs] = getCols(metadata);
+    //console.log('rc_names:', rc_names)
+    //console.log('rc_phs:', rc_phs)
+    //console.log('metadata:', metadata)
     // Insert into roll_calls table
     const insertRollCallSQL = `INSERT INTO roll_calls (`+rc_names+`) VALUES (`+rc_phs+`)`;
-    // You need to replace ... with the actual columns and values based on voteMetadata
     const rollInfo = db.prepare(insertRollCallSQL).run(metadata);
     const rollCallId = rollInfo.lastInsertRowid;
-    const parsedVotes = processVoteData(result['rollcall-vote']['vote-data']);
+    const parsedVotes = processVoteData(data['rollcall-vote']['vote-data'], metadata);
     db.prepare('COMMIT').run();
 
     db.prepare('BEGIN TRANSACTION').run();
@@ -186,38 +206,51 @@ const processXMLFile = async (filePath) => {
     db.prepare('COMMIT').run();
   } catch (error) {
     console.error('Error processing XML file:', error.message);
+    console.error(error);
+    process.exit();
   }
 };
 
-// Path to the directory containing the XML files
-const xmlDirPath = path.join(__dirname, 'votes');
+const processRollCalls = async () => {
+  await sdb.setupDb(true)
+  await dv.downloadAllFiles();    /// UNCOMMENT ME
+  // Path to the SQLite database file
+  const dbPath = path.join(__dirname, 'data/congress_votes.db');
+  const db = new sqlite(dbPath);
 
+  // Path to the directory containing the XML files
+  const rcPath = path.join(__dirname, 'data/rollcalls');
+  const dirs = gd.getDirectoriesRecursive(rcPath)
 
-// Process all XML files
-fs.readdir(xmlDirPath, (err, files) => {
-  if (err) {
-    console.error('Error reading the directory:', err.message);
-    return;
+  for (const xmlDirPath of dirs) {
+    // Process all XML files
+    files = fs.readdirSync(xmlDirPath)
+    //files = files.slice(100, 104);
+    for (file of files) {
+      // If the filename does not have ".xml" in it, skip it.
+      if (!file.includes('.xml')) {
+        continue
+      }
+      const filePath = path.join(xmlDirPath, file);
+      processRollcallXmlFile(filePath, db);
+    }
   }
-  //files = files.slice(100, 104);
-  files.forEach((file) => {
-    const filePath = path.join(xmlDirPath, file);
-    processXMLFile(filePath);
-  });
-});
 
-
-const closeDb = () => {
-  // Remember to close the database connection when all files are processed
-  // You may want to set this up in a more sophisticated way to ensure that
-  // the connection is closed only after all files have been processed
-  //db.close();
+  // const testProcess = async () => {
+  //   const file = 'roll340.xml';
+  //   const filePath = path.join(xmlDirPath, file);
+  //   await processRollcallXmlFile(filePath);
+  //   closeDb();
+  // }
+  // //testProcess()
+  db.close()
 }
+processRollCalls()
 
-const testProcess = async () => {
-  const file = 'roll340.xml';
+const testProcess = () => {
+  const xmlDirPath = 'data/rollcalls/house/118/1'
+  const file = 'roll340.xml'
   const filePath = path.join(xmlDirPath, file);
-  await processXMLFile(filePath);
-  closeDb();
+  parseXMLFile(filePath)
 }
-//testProcess();
+//testProcess()
