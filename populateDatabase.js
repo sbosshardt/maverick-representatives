@@ -23,7 +23,7 @@ const xml_db_name_mapping = {
   "congress": "congress",
   "session": "session",
   "chamber": "chamber",
-  "committee-name": "committee_name",
+  "committee": "committee",
   "rollcall-num": "rollcall_num",
   "legis-num": "legis_num",
   "vote-issue": "vote_issue",
@@ -40,7 +40,7 @@ const xml_db_name_mapping = {
 
 global.leg_name_id_id_map = {};
 
-const processVoteMetadata = (voteMetadata) => {
+const processHouseVoteMetadata = (voteMetadata) => {
   //console.log(voteMetadata);
   let rollcallValues = {};
   Object.entries(xml_db_name_mapping).map(obj => {
@@ -57,6 +57,7 @@ const processVoteMetadata = (voteMetadata) => {
   if (rollcallValues['action_time']?.['#text']) {
     rollcallValues['action_time'] = rollcallValues['action_time']['#text'];
   }
+  rollcallValues['chamber'] = 'House'
   //console.log(rollcallValues);
   let totalsRows = [];
   if (voteMetadata['vote-totals']) {
@@ -133,7 +134,7 @@ const processHouseRollcallXmlData = (data, db) => {
   try {
     //const voteMetadata = data['vote-metadata'];
     //const voteData = data['vote-data'];
-    const [metadata, totals] = processVoteMetadata(data['rollcall-vote']['vote-metadata']);
+    const [metadata, totals] = processHouseVoteMetadata(data['rollcall-vote']['vote-metadata']);
 
     // Begin a transaction
     db.prepare('BEGIN TRANSACTION').run();
@@ -180,9 +181,10 @@ const processHouseRollcallXmlData = (data, db) => {
           nameId,
           voteInfo['legislator_name'],
           voteInfo['state'],
-          voteInfo['party']
+          voteInfo['party'],
+          "House"
         ];
-        const insertLegislatorSQL = `INSERT INTO legislators (name_id, legislator_name, state, party) VALUES (?, ?, ?, ?)
+        const insertLegislatorSQL = `INSERT INTO legislators (name_id, legislator_name, state, party, chamber) VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(name_id) DO UPDATE SET legislator_name = excluded.legislator_name, state = excluded.state, party = excluded.party`;
         const legInfo = db.prepare(insertLegislatorSQL).run(legislatorValues);
         const legislatorId = legInfo.lastInsertRowid;
@@ -213,7 +215,7 @@ const processHouseRollcallXmlData = (data, db) => {
 
 const processRollCalls = async () => {
   await sdb.setupDb(true)
-  await dv.downloadAllFiles();    /// UNCOMMENT ME
+  await dv.downloadAllFiles();
   // Path to the SQLite database file
   const dbPath = path.join(__dirname, 'data/congress_votes.db');
   const db = new sqlite(dbPath);

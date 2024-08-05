@@ -10,7 +10,7 @@ function parseCongressAndSessionFromPath(path) {
   if (match && match.length === 3) {
     const congress = parseInt(match[1], 10);
     const session = parseInt(match[2], 10);
-    console.log(`Congress: ${congress}, Session: ${session}`);
+    //console.log(`Congress: ${congress}, Session: ${session}`);
     return {congressNum: congress, session: session}
   } else {
     console.error("The string does not match the expected pattern.");

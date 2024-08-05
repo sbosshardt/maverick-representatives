@@ -31,7 +31,7 @@ const setupDb = async (overwriteExisting = false) => {
         congress INTEGER,
         session INTEGER,
         chamber TEXT,
-        committee_name TEXT,
+        committee TEXT,
         rollcall_num INTEGER,
         legis_num TEXT,
         vote_issue TEXT,
@@ -68,7 +68,8 @@ const setupDb = async (overwriteExisting = false) => {
         name_id TEXT UNIQUE,
         legislator_name TEXT,
         state TEXT,
-        party TEXT
+        party TEXT,
+        chamber TEXT
       );
     `).run();
 
@@ -78,13 +79,10 @@ const setupDb = async (overwriteExisting = false) => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         legislator_id INTEGER,
         roll_call_id INTEGER,
-        rollcall_num,
-        congress INTEGER,
-        session INTEGER,
         vote TEXT,
         FOREIGN KEY (legislator_id) REFERENCES legislators (id),
         FOREIGN KEY (roll_call_id) REFERENCES roll_calls (id)
-        CONSTRAINT legislator_roll_call UNIQUE(legislator_id, roll_call_id, congress, session) ON CONFLICT REPLACE
+        CONSTRAINT legislator_roll_call UNIQUE(legislator_id, roll_call_id) ON CONFLICT REPLACE
       );
     `).run();
 
