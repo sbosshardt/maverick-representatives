@@ -3,8 +3,14 @@ const sqlite = require('better-sqlite3');
 const path = require('path');
 
 const setupDb = async (overwriteExisting = false) => {
+  const saveDir = path.join(__dirname,'data')
+  if (!fs.existsSync(saveDir)) {
+    fs.mkdirSync(saveDir, { recursive: true });
+    console.log('Created data directory (for storing SQLite database in):', saveDir)
+  }
+
   // Path to the SQLite database file
-  const dbPath = path.join(__dirname, 'data/congress_votes.db');
+  const dbPath = path.join(saveDir, '/congress_votes.db');
 
   if (fs.existsSync(dbPath)) {
     if (overwriteExisting) {
